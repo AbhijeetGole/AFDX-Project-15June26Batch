@@ -1,0 +1,279 @@
+system:
+    instructions: "You are a Flight Booking AI Assistant of debellate Airways. You will help customer on booking a flight. Cancel a flight and Providing information about bookings. Be friendly and personalized. Always refer to contacts by name when you know it."
+    messages:
+        welcome: |
+            Hi, I'm a Flight Booking AI Assistant. How can i help you?
+        error: "Sorry, it looks like something has gone wrong."
+
+config:
+    agent_label: "Flight Booking Assistant"
+    agent_template: "SvcCopilotTmpl__AgentforceServiceAgent"
+    developer_name: "Flight_Booking_Assistant"
+    description: "Handle Creationg, Cancelation of flight and provide flight details."
+    default_agent_user: "flight_booking_assistant@00dfj00000rgayx319143024.ext"
+
+variables:
+    outofbusinesshours: mutable boolean
+        description: "This variable will store whether the time is out of business hours or not"
+    bookingno: mutable string
+        description: "This variable will store the flight booking number"
+    refundamount: mutable number
+        description: "This variable will store Refunded Amount once user cancel a booking"
+    bookingid: mutable string
+        description: "This variable will store Booking Id"    
+    emaildetails: mutable string
+        description: "This variable will store user email address used for booking"
+    bookingdetails: mutable object
+        description: "This variable will store all the details of booked flight"
+    casenumber: mutable string
+        description: "Case created in of business hours"
+    iscalledfromcancel: mutable boolean = False
+        description: "This variable will store whether the execution started from cancel booking subagent or not"
+    traveldate: mutable date
+        description: "This variable will store date of travel"
+    priortymember: mutable boolean
+        description: "This variable will store whether user is priority member or not"
+    bookingprice: mutable number
+        description: "This variable will store the price of the flight ticket"
+    daysbetweencount: mutable number
+        description: "This variable will store the days count between travel start date and today's date"    
+
+language:
+    additional_locales: "en_GB"
+    default_locale: "en_US"
+    all_additional_locales: False
+
+knowledge:
+    rag_feature_config_id: "ARFPC_1JDfj000009AetRGAS"
+    citations_url: ""
+    citations_enabled: False
+
+start_agent agent_router:
+    label: "Agent Router"
+    description: "Welcome the user and determine the appropriate subagent based on user input"
+    model_config:
+        model: "model://sfdc_ai__DefaultEinsteinHyperClassifier"
+    reasoning:
+        instructions: ->
+            | Select the best tool to call based on conversation history and user's intent.
+        actions:
+            go_to_GeneralFAQ: @utils.transition to @subagent.GeneralFAQ
+            go_to_get_business_hours: @utils.transition to @subagent.get_business_hours
+            go_to_create_booking: @utils.transition to @subagent.create_booking
+            go_to_fetch_booking_details: @utils.transition to @subagent.fetch_booking_details
+            go_to_cancel_booking: @utils.transition to @subagent.cancel_booking
+
+subagent GeneralFAQ:
+    label: "General FAQ"
+    description: "This subagent is for helping answer customer's questions by searching through the knowledge articles and providing information from those articles. The questions can be about the company and its products, policies or business procedures"
+    reasoning:
+        instructions: ->
+            | Your job is solely to help with issues and answer questions about the company, its products, procedures, or policies by searching knowledge articles.
+            | If the customer's question is too vague or general, ask for more details and clarification to give a better answer.
+            | If you are unable to help the customer even after asking clarifying questions, ask if they want to escalate this issue to a live agent.
+            | If you are unable to answer customer's questions, ask if they want to escalate this issue to a live agent.
+            | Never provide generic information, advice or troubleshooting steps, unless retrieved from searching knowledge articles.
+            | Include sources in your response when available from the knowledge articles, otherwise proceed without them.
+        actions:
+            AnswerQuestionsWithKnowledge: @actions.AnswerQuestionsWithKnowledge
+                with query = ...
+                with citationsUrl = ...
+                with ragFeatureConfigId = ...
+                with citationsEnabled = ...
+    actions:
+        AnswerQuestionsWithKnowledge:
+            description: "Answers questions about company policies and procedures, troubleshooting steps, or product information. For example: 'What is your return policy?' 'How do I fix an issue?' or 'What features does a product have?'"
+            label: "Answer Questions with Knowledge"
+            require_user_confirmation: False
+            include_in_progress_indicator: True
+            progress_indicator_message: "Getting answers"
+            source: "EmployeeCopilot__AnswerQuestionsWithKnowledge"
+            target: "standardInvocableAction://streamKnowledgeSearch"
+            inputs:
+                "query": string
+                    description: "Required. A string created by generative AI to be used in the knowledge article search."
+                    label: "Query"
+                    is_required: True
+                    is_user_input: True
+                "citationsUrl": string = @knowledge.citations_url
+                    description: "The URL to use for citations for custom Agents."
+                    label: "Citations Url"
+                    is_required: False
+                    is_user_input: True
+                "ragFeatureConfigId": string = @knowledge.rag_feature_config_id
+                    description: "The RAG Feature ID to use for grounding this copilot action invocation."
+                    label: "RAG Feature Configuration Id"
+                    is_required: False
+                    is_user_input: True
+                "citationsEnabled": boolean = @knowledge.citations_enabled
+                    description: "Whether or not citations are enabled."
+                    label: "Citations Enabled"
+                    is_required: False
+                    is_user_input: True
+            outputs:
+                "knowledgeSummary": object
+                    description: "A string formatted as rich text that includes a summary of the information retrieved from the knowledge articles and citations to those articles."
+                    label: "Knowledge Summary"
+                    is_displayable: True
+                    filter_from_agent: False
+                    complex_data_type_name: "lightning__richTextType"
+                "citationSources": object
+                    description: "Source links for the chunks in the hydrated prompt that's used by the planner service."
+                    label: "Citation Sources"
+                    is_displayable: False
+                    filter_from_agent: False
+                    complex_data_type_name: "@apexClassType/AiCopilot__GenAiCitationInput"
+
+
+subagent get_business_hours:
+    label: "Get Business Hours"
+    description: | 
+        getting business hours of the flights
+    reasoning:
+        instructions: ->
+         | The business hours is from Monday to Saturday 8 AM CST to 12 AM CST and in Sunday 9 AM CST to 9PM CST.
+            If a user wants to do perform any task check whether its within business hours or not.
+            If not within business hours set {!@variables.outofbusinesshours} as true
+        
+subagent create_booking:
+    label: "create booking"
+    description: | 
+        create flight booking right now through LLM only
+    reasoning:
+        instructions: ->
+            | Thiw will show the available flights.
+              - Once user confirms and provide the passenger details it will book the flight ticket.
+
+subagent fetch_booking_details:
+    label: "fetch booking details"
+    description: |
+
+        fetching booking details from the CRM data
+    reasoning:
+        instructions: ->
+            | Ask for bookingno or email address if you do not have already.
+                - Proceed with {!@actions.get_booking_details}
+        actions:
+            get_booking_details: @actions.get_booking_details
+                with bookingno = ...
+                with emaildetails = ...
+                set @variables.bookingid = @outputs.bookingid
+                set @variables.bookingdetails = @outputs.bookingdetails
+                set @variables.daysbetweencount = @outputs.daysbetweencount
+
+    #after_reasoning block acts like a post-execution hook: It enriches variables with data from the booking record and conditionally redirects the conversation to cancellation if that was the user's intent.
+
+    after_reasoning:
+        if @variables.bookingdetails != None and @variables.bookingdetails.data != None:
+            set @variables.traveldate = @variables.bookingdetails.data.Travel_Start_Date__c
+            set @variables.priortymember = @variables.bookingdetails.data.Priority_Member__c
+            set @variables.bookingprice = @variables.bookingdetails.data.Price__c
+        
+        if @variables.iscalledfromcancel == True and @variables.bookingid != "" and @variables.bookingno != None:
+            transition to @subagent.cancel_booking
+
+    actions:
+        get_booking_details:
+            label: "get booking details"
+            description: |
+                get booking details
+            target: "flow://Get_Booking_Details"
+            inputs:
+                bookingno: string
+                    label: "bookingno"
+                    is_required: False
+                emaildetails: string
+                    label: "emaildetails"
+                    is_required: False
+            outputs:
+                bookingdetails: object
+                    label: "bookingdetails"
+                    complex_data_type_name: "lightning__recordInfoType"
+                    is_displayable: False
+                    filter_from_agent: False
+                bookingid: string
+                    label: "bookingid"
+                    is_displayable: False
+                    filter_from_agent: False
+                daysbetweencount: number
+                    label: "daysbetweencount"
+                    is_displayable: False
+                    filter_from_agent: False
+
+subagent cancel_booking:
+    label: "Cancel Flight Booking"
+    description: "Cancel the already booked flight"
+    
+    reasoning:
+      instructions: ->
+         if @variables.iscalledfromcancel == False:
+            set @variables.iscalledfromcancel = True
+        
+         if @variables.bookingid != "" and @variables.bookingid != None:
+            run @actions.cancel_booked_flight
+                with bookingid = @variables.bookingid
+                with priortymember = @variables.priortymember
+                with bookingprice = @variables.bookingprice
+                with daysbetweencount = @variables.daysbetweencount
+                set @variables.refundamount = @outputs.refundedamount
+                set @variables.casenumber = @outputs.casenumber
+         else:
+            transition to @subagent.fetch_booking_details
+        
+         if @variables.casenumber != None:
+           |Inform the user about the case and refund details. 
+            - A case {!@variables.casenumber} has been created for you to process the refund. You will receive a refund amount of {!@variables.refundamount}
+        
+      actions:
+        tool_fetch_booking_details: @subagent.fetch_booking_details
+            description:"This will fetch the details of flight that has been booked based on bookingno or email address"
+        
+        #if we write the below tool again in actions after we write it in reasoning, it will call cancel_booked_flight twice and the apex will execute twice. We can uncomment the below code and check that in the Trace section.
+        #cancel_booked_flight: @actions.cancel_booked_flight
+            #with bookingid = @variables.bookingid
+            #with priortymember = @variables.priortymember
+            #with bookingprice = @variables.bookingprice
+            #with daysbetweencount = @variables.daysbetweencount
+            #set @variables.refundamount = @outputs.refundedamount
+            #set @variables.casenumber = @outputs.casenumber
+    
+    actions:
+        cancel_booked_flight:
+            inputs:
+                bookingid: string
+                    description: "Flight Booking Salesforce Id"
+                    label: "bookingid"
+                    is_required: False
+                    is_user_input: False
+                priortymember: boolean
+                    description: "Whether a user is priority member or not"
+                    label: "priortymember"
+                    is_required: False
+                    is_user_input: False
+                bookingprice: number
+                    description: "Booking price"
+                    label: "bookingprice"
+                    is_required: False
+                    is_user_input: False
+                daysbetweencount: number
+                    description: "store the days count between travel start date and today's date"
+                    label: "daysbetweencount"
+                    is_required: False
+                    is_user_input: False
+            outputs:
+                refundedamount: number
+                    description: "Amount that will be refunded"
+                    label: "refundedamount"
+                    is_used_by_planner: True
+                    is_displayable: True
+                casenumber: string
+                    description: "Case Number"
+                    label: "casenumber"
+                    is_used_by_planner: True
+                    is_displayable: True
+
+            target: "apex://CancelFlightBooking"
+            label: "Cancel Flight Booking"
+            require_user_confirmation: False
+            include_in_progress_indicator: True
+            progress_indicator_message: "Cancel Flight Booking"

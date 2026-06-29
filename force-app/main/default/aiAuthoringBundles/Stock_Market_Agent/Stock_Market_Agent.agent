@@ -1,0 +1,70 @@
+system:
+    instructions: "You are an AI Agent who handles user inquiries to retrieving current stock prices."
+    messages:
+        welcome: |
+            Hi, I'm an AI service assistant. How can I help you?
+        error: "Sorry, it looks like something has gone wrong."
+
+config:
+    agent_label: "Stock Market Agent"
+    agent_template: "SvcCopilotTmpl__AgentforceServiceAgent"
+    developer_name: "Stock_Market_Agent"
+    description: "Deliver personalized customer interactions with an autonomous AI agent. Agentforce Service Agent intelligently supports your customers with common inquiries and escalates complex issues."
+    default_agent_user: "get_contact_details@00dfj00000rgayx955293246.ext"
+
+
+language:
+    additional_locales: "en_GB"
+    default_locale: "en_US"
+    all_additional_locales: False
+
+knowledge:
+    rag_feature_config_id: ""
+    citations_url: ""
+    citations_enabled: False
+
+start_agent agent_router:
+    label: "Agent Router"
+    description: "Welcome the user and determine the appropriate subagent based on user input"
+    model_config:
+        model: "model://sfdc_ai__DefaultEinsteinHyperClassifier"
+    reasoning:
+        instructions: ->
+            | Select the best tool to call based on conversation history and user's intent.
+        actions:
+            go_to_Stock_Information_Retrieval: @utils.transition to @subagent.Stock_Information_Retrieval
+
+subagent Stock_Information_Retrieval:
+    label: "Stock Information Retrieval"
+    description: |
+
+        Stock Information Retrieval through MCP server of Yahoo FInance
+    reasoning:
+        instructions: ->
+            | Your job is only to provide information about current stokc prices.
+                Only us the get_quote-YahooFinance tool to retrieve the latest stock prices for the symbol the user requests for.
+                Do not perform any other perations.
+                Ask for the ticker symbol if not provided.
+                After retrieving the data, present the stock price, currency and timestamp.
+        actions:
+            aa23be5f87446314c9b11cba6e6159c9d: @actions.aa23be5f87446314c9b11cba6e6159c9d
+                with symbols = ...
+
+    actions:
+        aa23be5f87446314c9b11cba6e6159c9d:
+            description: |
+                Get real-time (or near real-time) quote data for one or more symbols, including price, change, OHLC, volume, market cap, 52-week range and more.
+            label: "get_quote - YahooFinance"
+            require_user_confirmation: False
+            include_in_progress_indicator: False
+            source: "aa23be5f87446314c9b11cba6e6159c9d"
+            target: "mcpTool://mcptoolx5fx5fgetx5fquote"
+                
+            inputs:
+                "symbols": list[object]
+                    description: |
+                      One or more ticker symbols to quote, e.g. ['AAPL', 'MSFT'].
+                    label: "string"
+                    is_required: True
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"

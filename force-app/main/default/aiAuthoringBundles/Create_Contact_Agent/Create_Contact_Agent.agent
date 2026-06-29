@@ -1,0 +1,89 @@
+system:
+    instructions: "You are a support AI assistant who helps users to create contact. Always confirm thefull name with the user after the contact is created."
+    messages:
+        welcome: |
+            Hi, I can help you create a new contact. Ask for the last_name of the contact.
+        error: "Sorry, it looks like something has gone wrong."
+
+config:
+    agent_label: "Create Contact Agent"
+    agent_template: "SvcCopilotTmpl__AgentforceServiceAgent"
+    developer_name: "Create_Contact_Agent"
+    description: "Deliver personalized customer interactions with an autonomous AI agent. Agentforce Service Agent intelligently supports your customers with common inquiries and escalates complex issues."
+    default_agent_user: "get_contact_details@00dfj00000rgayx955293246.ext"
+
+
+language:
+    additional_locales: "en_GB"
+    default_locale: "en_US"
+    all_additional_locales: False
+
+variables:
+    full_name: mutable string
+        description: "Full Name of the contact"
+
+start_agent agent_router:
+    label: "Agent Router"
+    description: "Welcome the user and determine the appropriate subagent based on user input"
+    model_config:
+        model: "model://sfdc_ai__DefaultEinsteinHyperClassifier"
+    reasoning:
+        instructions: ->
+            | Select the best tool to call based on conversation history and user's intent.
+        actions:
+            got_to_contact_management: @utils.transition to @subagent.contact_management
+                description: "Hand off to the contact mangament subject to create a new contact."
+            go_to_contact_management: @utils.transition to @subagent.contact_management
+
+subagent contact_management:
+    label: "contact management"
+    description: |
+
+        contact management
+    reasoning:
+        instructions: | Help the user create a contact.
+              Step 1 : If no last_name is provided, ask: "Please provide a last name of the contact."
+              Step 2 : Once last_name is provided, ask: "Would like to provide first_name, mailing_street and mailing_zip?"
+                  - If the user provides first_name, mailing_street, and mailing_zip capture it.
+                  - If not, proceed with just the last_name.
+              Step 3: Call @actions.create_contact and confirm the result.
+                  - If @variables.full_name has a value, respond:
+                      "Your Contact has been created successfully, Contact created: {!@variables.full_name}"
+                  - If @variables.full_name is empty and error_message has a value, respond:
+                      "Sorry, the contact creation failed. Error: {!@outputs.error_message}.
+                      Please try again or contact support team."
+        actions:
+            create_contact: @actions.create_contact
+                with first_name = ...
+                with last_name = ...
+                with mailing_street = ...
+                with mailing_zip = ...
+                set @variables.full_name = @outputs.full_name
+
+    actions:
+        create_contact:
+            label: "create contact"
+            description: | creating a new contact
+            target: "flow://Create_Contact"
+            inputs:
+                first_name: string
+                    label: "first_name"
+                    is_required: False
+                last_name: string
+                    label: "last_name"
+                    is_required: False
+                mailing_street: string
+                    label: "mailing_street"
+                    is_required: False
+                mailing_zip: string
+                    label: "mailing_zip"
+                    is_required: False
+            outputs:
+                error_message: string
+                    label: "error_message"
+                    is_displayable: False
+                    filter_from_agent: False
+                full_name: string
+                    label: "full_name"
+                    is_displayable: False
+                    filter_from_agent: False

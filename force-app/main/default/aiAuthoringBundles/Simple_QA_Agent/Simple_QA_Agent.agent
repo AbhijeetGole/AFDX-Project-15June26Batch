@@ -1,0 +1,56 @@
+# Simple QA Agent
+# A simple Q and A agent that handles basic questions using LLM reasoning only
+
+system:
+    instructions: | You are a friendly assistant. Greet user warmly and help them.
+
+    messages:
+        welcome: | Hello, I am here to help. What can I do for you today?
+        error: "Something went wrong. Try again."
+       
+config:
+    agent_label: "Simple QA Agent"
+    agent_template: "EmployeeCopilot__AgentforceEmployeeAgent"
+    developer_name: "Simple_QA_Agent"
+    agent_type: "AgentforceEmployeeAgent"
+    description: "A simple Q and A agent to handle user queries."
+
+language:
+    default_locale: "en_US"
+    additional_locales: "en_GB, hi, fr"
+
+start_agent agent_router:
+    label: "Agent Router"
+    description: "Welcome the user and determine the appropriate subagent based on user input"
+    model_config:
+        #model: "model://sfdc_ai__DefaultEinsteinHyperClassifier"
+        model: "model://sfdc_ai__DefaultGPT5"  # set the different model as well
+    reasoning:
+        instructions: ->
+            | Select the best tool to call based on conversation history and user's intent.
+        actions:
+            go_to_qa_handler: @utils.transition to @subagent.qa_handler
+
+subagent qa_handler:
+    label: "Q&A Handler"
+    description:"Handles QUestions and provide answers"
+
+    reasoning:
+        instructions: ->
+            | Anser the user's question based on your own knowledge.
+            | Be helpful, accurate and concise.
+            | Keep responses clear and easy to understand.
+            | If you need more information, ask clarifying questions.
+        actions:
+            new_question: @utils.transition to @subagent.agent_router
+            end_conversation: @utils.transition to @subagent.farewell
+
+subagent farewell:
+    label: "Farewell"
+    description:"Ends teh conversation gracefully."
+
+    reasoning:
+        instructions: ->
+            | Thank the user for their questions.
+            | Wish them a great day.
+            | Let them know they can return anytime for more help.

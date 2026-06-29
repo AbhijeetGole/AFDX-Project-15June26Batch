@@ -1,0 +1,313 @@
+system:
+    instructions: "You are a helpful weather assistant. Your responsibility is to answer questions about weather using the availabel MCP tools."
+    messages:
+        welcome: |
+            Hi, I'm an AI service assistant. How can I help you?
+        error: "Sorry, it looks like something has gone wrong."
+
+config:
+    agent_label: "Weather Assistant"
+    agent_template: "SvcCopilotTmpl__AgentforceServiceAgent"
+    developer_name: "Weather_Assistant"
+    description: "Deliver personalized customer interactions with an autonomous AI agent. Agentforce Service Agent intelligently supports your customers with common inquiries and escalates complex issues."
+    default_agent_user: "onboarding_agent@00dfj00000rgayx1509064996.ext"
+
+language:
+    additional_locales: "en_GB"
+    default_locale: "en_US"
+    all_additional_locales: False
+
+knowledge:
+    rag_feature_config_id: ""
+    citations_url: ""
+    citations_enabled: False
+
+start_agent agent_router:
+    label: "Agent Router"
+    description: "Welcome the user and determine the appropriate subagent based on user input"
+    model_config:
+        model: "model://sfdc_ai__DefaultEinsteinHyperClassifier"
+    reasoning:
+        instructions: ->
+            | Select the best tool to call based on conversation history and user's intent.
+        actions:
+            go_to_weather_report: @utils.transition to @subagent.weather_report
+
+subagent weather_report:
+    label: "weather report"
+    description: |
+        weather report through MCP server
+    reasoning:
+        instructions: ->
+            |   You are a Weather Assistant.
+
+                Always use the available MCP actions to answer weather-related questions.
+                Never answer weather questions using your own knowledge.
+
+                Tool usage rules:
+
+                1. If the user provides a city, town, village, landmark, or region:
+                - First call openmeteo_geocode.
+                - Extract the best matching latitude and longitude.
+                - Use those coordinates when calling openmeteo_get_forecast.
+                - Never guess coordinates.
+
+                2. If multiple locations are requested:
+                - Repeat the geocode and forecast process independently for each location.
+
+                3. If the location cannot be resolved:
+                - Inform the user politely.
+                - Do not call the forecast tool.
+
+                4. When the user asks:
+                - "Current weather"
+                - "Today's weather"
+                - "Weather now"
+
+                Request hourly variables:
+                - temperature_2m
+                - relative_humidity_2m
+                - weather_code
+                - wind_speed_10m
+
+                Summarize:
+                - Temperature
+                - Weather condition
+                - Humidity
+                - Wind speed
+
+                5. When the user asks:
+                - Tomorrow's weather
+                - Next few days
+                - Weekend weather
+                - Forecast
+
+                Request daily variables:
+                - temperature_2m_max
+                - temperature_2m_min
+                - precipitation_sum
+                - weather_code
+                - wind_speed_10m_max
+
+                Set forecast_days according to the user's request.
+
+                6. If the user asks:
+                - "Will it rain tomorrow?"
+                - "Is rain expected?"
+                - "Should I carry an umbrella?"
+
+                Request:
+                - precipitation_sum
+                - weather_code
+
+                Answer clearly with:
+                - Yes
+                - No
+                followed by a brief explanation.
+
+                7. Unless the user requests otherwise:
+                - temperature_unit = celsius
+                - wind_speed_unit = kmh
+                - precipitation_unit = mm
+                - timezone = auto
+
+                8. Always provide concise, user-friendly summaries instead of raw tool output.
+
+                9. If the user asks about weather in the past few days:
+                - Use past_days when calling openmeteo_get_forecast.
+
+                10. Never expose latitude, longitude, or raw MCP responses unless the user specifically asks for them.
+        actions:
+            abee059f5441b39d0bdb1c1151da175ed: @actions.abee059f5441b39d0bdb1c1151da175ed
+                with latitude = ...
+                with longitude = ...
+                with hourly_variables = ...
+                with daily_variables = ...
+                with forecast_days = ...
+                with past_days = ...
+                with temperature_unit = ...
+                with wind_speed_unit = ...
+                with precipitation_unit = ...
+                with timezone = ...
+            ad7497b1490ae3f97aba2a6f0877865eb: @actions.ad7497b1490ae3f97aba2a6f0877865eb
+                with name = ...
+                with count = ...
+                with language = ...
+
+
+    actions:
+        abee059f5441b39d0bdb1c1151da175ed:
+            description: |
+                Weather forecast for coordinates: hourly and/or daily variables for up to 16 days ahead, with optional past_days (up to 92) for recent history. Use past_days instead of openmeteo_get_historical for dates within the last 1–5 days, since ERA5 has a variable lag. Returns per-timestamp records — each hourly entry contains a "time" field (ISO 8601) plus one key per requested variable; each daily entry contains a "time" field (YYYY-MM-DD) plus requested variables. Common hourly variables: temperature_2m, precipitation, wind_speed_10m, relative_humidity_2m, cloud_cover, uv_index, apparent_temperature, precipitation_probability, weather_code, surface_pressure, visibility, wind_direction_10m, wind_gusts_10m, dew_point_2m. Common daily variables: temperature_2m_max, temperature_2m_min, precipitation_sum, wind_speed_10m_max, sunrise, sunset, uv_index_max, precipitation_hours, weather_code. At least one of hourly_variables or daily_variables is required.
+            label: "openmeteo_get_forecast - OpenMetroWeather"
+            require_user_confirmation: False
+            include_in_progress_indicator: False
+            source: "abee059f5441b39d0bdb1c1151da175ed"
+            target: "mcpTool://mcptoolx5fx5fopenmeteox5fgetx5fforecast"
+                
+            inputs:
+                "latitude": number
+                    description: |
+                      Latitude in decimal degrees (e.g., 47.6062 for Seattle). Use openmeteo_geocode to resolve a place name to coordinates.
+                    label: "string"
+                    is_required: True
+                    is_user_input: False
+                "longitude": number
+                    description: |
+                      Longitude in decimal degrees (e.g., -122.3321 for Seattle).
+                    label: "string"
+                    is_required: True
+                    is_user_input: False 
+                "hourly_variables": list[object]
+                    description: |
+                      Hourly variables to fetch (e.g., ["temperature_2m", "precipitation", "wind_speed_10m", "relative_humidity_2m", "cloud_cover", "uv_index", "apparent_temperature"]). At least one of hourly_variables or daily_variables is required.
+                    label: "string"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "daily_variables": list[object]
+                    description: |
+                      Daily summary variables (e.g., ["temperature_2m_max", "temperature_2m_min", "precipitation_sum", "wind_speed_10m_max", "sunrise", "sunset", "uv_index_max"]). At least one of hourly_variables or daily_variables is required.
+                    label: "string"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "forecast_days": integer
+                    description: |
+                      Number of forecast days (1–16). Default 7.
+                    label: "string"
+                    is_required: False
+                    is_user_input: False
+                "past_days": integer
+                    description: |
+                      Include this many days of past data before today (0–92). Use for recent history — ERA5 archive has a variable ~5-day lag. Default 0.
+                    label: "string"
+                    is_required: False
+                    is_user_input: False
+                "temperature_unit": string
+                    description: |
+                      Temperature unit. Default "celsius".
+                    label: "string"
+                    is_required: False
+                    is_user_input: False
+                "wind_speed_unit": string
+                    description: |
+                      Wind speed unit: "kmh" (km/h), "mph", "ms" (m/s), or "kn" (knots). Default "kmh".
+                    label: "string"
+                    is_required: False
+                    is_user_input: False
+                "precipitation_unit": string
+                    description: |
+                      Precipitation unit: "mm" or "inch". Default "mm".
+                    label: "string"
+                    is_required: False
+                    is_user_input: False
+                "timezone": string
+                    description: |
+                      IANA timezone (e.g., "America/Los_Angeles") or "auto" to use the location's local timezone. Default "auto". The timezone from openmeteo_geocode is ideal to pass here.
+                    label: "string"
+                    is_required: False
+                    is_user_input: False
+                
+            outputs:
+                "latitude": number
+                    description: |
+                      Snapped latitude (Open-Meteo snaps to nearest grid point)
+                    label: "string"
+                    is_displayable: False
+                    filter_from_agent: False 
+                "longitude": number
+                    description: |
+                      Snapped longitude
+                    label: "string"
+                    is_displayable: False
+                    filter_from_agent: False
+                "elevation": number
+                    description: |
+                      Terrain elevation at grid point (meters)
+                    label: "string"
+                    is_displayable: False
+                    filter_from_agent: False
+                "timezone": string
+                    description: |
+                      Resolved IANA timezone
+                    label: "string"
+                    is_displayable: False
+                    filter_from_agent: False
+                "utc_offset_seconds": number
+                    description: |
+                      UTC offset in seconds for this timezone at query time
+                    label: "string"
+                    is_displayable: False
+                    filter_from_agent: False
+                "hourly": list[object]
+                    description: |
+                      Per-hour records. Each object has a "time" field (ISO 8601) plus one key per requested variable with its value. Units are in the hourly_units map. Absent when only daily_variables were requested.
+                    label: "string"
+                    is_displayable: False
+                    filter_from_agent: False
+                    complex_data_type_name: "lightning__objectType"
+                "daily": list[object]
+                    description: |
+                      Per-day records. Each object has a "time" field (YYYY-MM-DD) plus one key per requested variable with its value. Units are in the daily_units map. Absent when only hourly_variables were requested.
+                    label: "string"
+                    is_displayable: False
+                    filter_from_agent: False
+                    complex_data_type_name: "lightning__objectType"
+                "hourly_units": object
+                    description: |
+                      Map of variable name → unit string for hourly data (e.g., {"temperature_2m": "°C", "precipitation": "mm"}). Absent when no hourly_variables were requested.
+                    label: "string"
+                    is_displayable: False
+                    filter_from_agent: False
+                    complex_data_type_name: "lightning__genericObjectType"
+                "daily_units": object
+                    description: |
+                      Map of variable name → unit string for daily data. Absent when no daily_variables were requested.
+                    label: "string"
+                    is_displayable: False
+                    filter_from_agent: False
+                    complex_data_type_name: "lightning__genericObjectType"
+        ad7497b1490ae3f97aba2a6f0877865eb:
+            description: |
+                Resolve a place name to ranked coordinate matches with country, region, elevation, timezone, and population. Required prerequisite for name-based queries — all weather tools take latitude/longitude, not place names. Returns up to 10 matches ranked by population/relevance; use country or admin1 to disambiguate when multiple cities share a name.
+            label: "openmeteo_geocode - OpenMetroWeather"
+            require_user_confirmation: False
+            include_in_progress_indicator: False
+            source: "ad7497b1490ae3f97aba2a6f0877865eb"
+            target: "mcpTool://mcptoolx5fx5fopenmeteox5fgeocode"
+                
+            inputs:
+                "name": string
+                    description: |
+                      Place name to search. Can be a city, region, or landmark (e.g., "Seattle", "Mount Rainier"). Weather tools require coordinates — use the lat/lon from this result.
+                    label: "string"
+                    is_required: True
+                    is_user_input: False
+                "count": integer
+                    description: |
+                      Max results to return (1–10). Default 5. Return more when disambiguating common names like "Springfield" or "Portland".
+                    label: "string"
+                    is_required: False
+                    is_user_input: False
+                "language": string
+                    description: |
+                      Response language for place names (ISO 639-1, e.g., "en", "de", "fr"). Default "en".
+                    label: "string"
+                    is_required: False
+                    is_user_input: False
+                
+            outputs:
+                "results": list[object]
+                    description: |
+                      Ranked matches (most relevant first). Empty when no results match.
+                    label: "string"
+                    is_displayable: False
+                    filter_from_agent: False
+                    complex_data_type_name: "lightning__objectType"
+                "count": number
+                    description: |
+                      Number of results returned
+                    label: "string"
+                    is_displayable: False
+                    filter_from_agent: False

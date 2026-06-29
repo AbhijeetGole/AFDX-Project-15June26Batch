@@ -1,0 +1,37 @@
+# Hello World Agent
+# The minimal viable Agentforce Agent
+
+# Why this structure?
+# system - Sets agent personality, and default messages
+# config - required metadata for deployment(agent_name must be unique.)
+# variables - Linked variables connect to Messaging Context(required for deployment)
+# language - Local settings
+# start_agent - Entry point subagent (exactly one required)
+system:
+    instructions: | You are a friendly assistant. Greet user warmly and help them.
+
+    messages:
+        welcome: | Hello, I am here to help. What can I do for you today?
+        error: "Something went wrong. Try again."
+       
+config:
+    agent_label: "Hello World Agent"
+    agent_template: "EmployeeCopilot__AgentforceEmployeeAgent"
+    developer_name: "Hello_World_Agent"
+    agent_type: "AgentforceEmployeeAgent"
+    description: "A minimal example agent to learn about Agent Script."
+
+language:
+    default_locale: "en_US"
+    additional_locales: "en_GB, hi, fr"
+
+# Entry point subagent - this is where every conversation starts
+start_agent main:
+    label: "Main"
+    description: "Greets User politely and provide help"
+
+    reasoning:
+        instructions: ->
+            |   Welcome the user warmly.
+                Ask how you can help them today.
+                Be friendly and conversational.

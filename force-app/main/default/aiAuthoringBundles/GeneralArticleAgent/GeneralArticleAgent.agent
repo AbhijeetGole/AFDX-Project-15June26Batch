@@ -1,0 +1,96 @@
+system:
+    instructions: "You are an AI Agent."
+    messages:
+        welcome: |
+            Hi, I'm an AI service assistant. How can I help you?
+        error: "Sorry, it looks like something has gone wrong."
+
+config:
+    agent_label: "GeneralArticleAgent"
+    agent_template: "SvcCopilotTmpl__AgentforceServiceAgent"
+    developer_name: "GeneralArticleAgent"
+    description: "Deliver personalized customer interactions with an autonomous AI agent. Agentforce Service Agent intelligently supports your customers with common inquiries and escalates complex issues."
+    default_agent_user: "generalarticleagent@00dfj00000rgayx1943551547.ext"
+
+language:
+    additional_locales: "en_GB"
+    default_locale: "en_US"
+    all_additional_locales: False
+
+knowledge:
+    citations_enabled: False
+    rag_feature_config_id: "ARFPC_1JDfj000009AVYPGA4"
+    citations_url: ""
+
+start_agent agent_router:
+    label: "Agent Router"
+    description: "Welcome the user and determine the appropriate subagent based on user input"
+    model_config:
+        model: "model://sfdc_ai__DefaultEinsteinHyperClassifier"
+    reasoning:
+        instructions: ->
+            | Select the best tool to call based on conversation history and user's intent.
+        actions:
+            go_to_GeneralFAQ: @utils.transition to @subagent.GeneralFAQ
+
+subagent GeneralFAQ:
+    label: "General FAQ"
+    description: "This subagent is for helping answer customer's questions by searching through the knowledge articles and providing information from those articles. The questions can be about the company and its products, policies or business procedures"
+    reasoning:
+        instructions: ->
+            | Your job is solely to help with issues and answer questions about the company, its products, procedures, or policies by searching knowledge articles.
+            | If the customer's question is too vague or general, ask for more details and clarification to give a better answer.
+            | If you are unable to help the customer even after asking clarifying questions, ask if they want to escalate this issue to a live agent.
+            | If you are unable to answer customer's questions, ask if they want to escalate this issue to a live agent.
+            | Never provide generic information, advice or troubleshooting steps, unless retrieved from searching knowledge articles.
+            | Include sources in your response when available from the knowledge articles, otherwise proceed without them.
+        actions:
+            AnswerQuestionsWithKnowledge: @actions.AnswerQuestionsWithKnowledge
+                with query = ...
+                with citationsUrl = ...
+                with ragFeatureConfigId = ...
+                with citationsEnabled = ...
+    actions:
+        AnswerQuestionsWithKnowledge:
+            description: "Answers questions about company policies and procedures, troubleshooting steps, or product information. For example: 'What is your return policy?' 'How do I fix an issue?' or 'What features does a product have?'"
+            label: "Answer Questions with Knowledge"
+            require_user_confirmation: False
+            include_in_progress_indicator: True
+            progress_indicator_message: "Getting answers"
+            source: "EmployeeCopilot__AnswerQuestionsWithKnowledge"
+            target: "standardInvocableAction://streamKnowledgeSearch"
+            inputs:
+                "query": string
+                    description: "Required. A string created by generative AI to be used in the knowledge article search."
+                    label: "Query"
+                    is_required: True
+                    is_user_input: True
+                "citationsUrl": string = @knowledge.citations_url
+                    description: "The URL to use for citations for custom Agents."
+                    label: "Citations Url"
+                    is_required: False
+                    is_user_input: True
+                "ragFeatureConfigId": string = @knowledge.rag_feature_config_id
+                    description: "The RAG Feature ID to use for grounding this copilot action invocation."
+                    label: "RAG Feature Configuration Id"
+                    is_required: False
+                    is_user_input: True
+                "citationsEnabled": boolean = @knowledge.citations_enabled
+                    description: "Whether or not citations are enabled."
+                    label: "Citations Enabled"
+                    is_required: False
+                    is_user_input: True
+            outputs:
+                "knowledgeSummary": object
+                    description: "A string formatted as rich text that includes a summary of the information retrieved from the knowledge articles and citations to those articles."
+                    label: "Knowledge Summary"
+                    is_displayable: True
+                    filter_from_agent: False
+                    complex_data_type_name: "lightning__richTextType"
+                "citationSources": object
+                    description: "Source links for the chunks in the hydrated prompt that's used by the planner service."
+                    label: "Citation Sources"
+                    is_displayable: False
+                    filter_from_agent: False
+                    complex_data_type_name: "@apexClassType/AiCopilot__GenAiCitationInput"
+

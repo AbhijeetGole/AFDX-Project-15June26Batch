@@ -1,0 +1,93 @@
+system:
+    instructions: "You are a friendly player information collector. Guide the user step by step to provide their first name, last name, and city, then display a warm welcome message."
+    messages:
+        welcome: "Hello! Please tell me your first name."
+        error: "Something went wrong. Try again."
+
+config:
+    agent_label: "GreetPlayer"
+    agent_template: "EmployeeCopilot__AgentforceEmployeeAgent"
+    developer_name: "GreetPlayer"
+    agent_type: "AgentforceEmployeeAgent"
+    description: "Collects first name, last name, and city from the user and displays a welcome message."
+
+language:
+    default_locale: "en_US"
+    additional_locales: ""
+    all_additional_locales: False
+
+variables:
+    first_name: mutable string = ""
+        description: "Player's first name"
+
+    last_name: mutable string = ""
+        description: "Player's last name"
+
+    city: mutable string = ""
+        description: "Player's city"
+
+    full_name: mutable string = ""
+        description: "Player's full name (first + last)"
+
+    welcome_message: mutable string = ""
+        description: "Welcome message including full name and city"
+    
+    city_tier: mutable string = ""
+        description: "Tier classification of the city (Tier 1 or Tier 2)"
+
+    tier1_cities: object = { "cities": ["Mumbai", "Delhi", "Chennai", "Kolkata", "Pune", "Hyderabad", "Bengaluru"] }
+        description: "List of Tier 1 cities"
+
+    tier2_cities: object = { "cities": ["Jaipur", "Lucknow", "Surat", "Kochi", "Indore", "Patna", "Ranchi"] }
+        description: "List of Tier 2 cities"
+
+    tier3_cities: object = { "cities": ["Other smaller towns and cities"] }
+        description: "List of Tier 3 cities"
+        
+    info_complete: mutable boolean = False
+        description: "Whether all information has been collected"
+
+start_agent agent_router:
+    label: "Agent Router"
+    description: "Routes user to name collector"
+    model_config:
+        model: "model://sfdc_ai__DefaultEinsteinHyperClassifier"
+    reasoning:
+        instructions: |
+            Collect the player's first name, last name, and city step by step.
+            If unclear, ask clarifying questions.
+        actions:
+            go_to_name_collector: @utils.transition to @subagent.greet_player
+              description: "Collects first name, last name, and city from the user."
+
+subagent greet_player:
+    description: "Collects first name, last name, and city and saves them in variables."
+
+    reasoning:
+        instructions: |
+            1. If first_name is empty, ask for the first name.
+            2. If last_name is empty, ask for the last name.
+            3. If city is empty, ask for the city.
+            4. Once all are collected:
+                - Concatenate first_name + " " + last_name into full_name.
+                - Determine city_tier:
+                   If city in tier1_cities → Tier 1
+                   Else If city in tier2_cities → Tier 2
+                   Else → Tier 3
+                - Save city_tier explicitly.
+                - Create welcome_message = "Welcome " + full_name + " from " + city + " (" + city_tier + " city)!"
+                - Mark info_complete = True.
+                - Display the welcome message using full_name, city and city_tier.
+                - Also display the list of cities belongs to that tier{!@variables.city_tier}!
+        actions:
+            set_first: @utils.setVariables
+                with first_name=...
+            set_last: @utils.setVariables
+                with last_name=...
+            set_city: @utils.setVariables
+                with city=...
+            set_full: @utils.setVariables
+                with full_name=...
+                with city_tier=...
+                with welcome_message=...
+                with info_complete=True

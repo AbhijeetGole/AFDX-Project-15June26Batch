@@ -1,0 +1,69 @@
+system:
+    instructions: |
+        You are an orchestrations agent responsible for routing user requests to the appropriate sub-agent.
+    messages:
+        welcome: |
+            Hi, I can help you create a contact or fetch contact details. What would you like to do?
+        error: "Sorry, it looks like something has gone wrong."
+
+config:
+    agent_label: "Contact Orchestration Agent"
+    agent_template: "SvcCopilotTmpl__AgentforceServiceAgent"
+    developer_name: "Contact_Orchestration_Agent"
+    description: "Routes user request to Create Contact Agent and Get Contact Details Agent."
+    default_agent_user: "get_contact_details@00dfj00000rgayx955293246.ext"
+
+language:
+    additional_locales: "en_GB"
+    default_locale: "en_US"
+    all_additional_locales: False
+
+
+start_agent agent_router:
+    label: "Agent Router"
+    description: "Welcome the user and determine the appropriate subagent based on user input"
+    reasoning:
+        instructions: ->
+            | Analyze the user's request carefully and decide which connected agent to invoke.
+
+              Intent Classification:
+
+              1. CREATE CONTACT:
+              Trigger if user intent includes:
+                  - create contact
+                  - add contact
+                  - new contact
+                  - register contact
+
+              2. FETCH CONTACT:
+              Trigger if user intent includes:
+                  - get contact details
+                  - fetch contact
+                  - show contact details
+                  - contact information
+                  - address and zip lookup
+
+              Decision rules:
+              - If intent is clearly CREATE -> call create_contact
+              - If intent is clearly FETCH -> call get_contact_details
+              - If unclear -> ask user:
+              "Would like to create a new contact or fetch existing contact details?"
+        actions:
+            go_to_Create_Contact_Agent: @connected_subagent.Create_Contact_Agent
+            go_to_Get_Contact_Details: @connected_subagent.Get_Contact_Details
+
+connected_subagent Create_Contact_Agent:
+    label: "Create Contact Agent"
+    target: "agent://Create_Contact_Agent"
+    loading_text: |
+        Collaborating with other agents
+    description: |
+        Deliver personalized customer interactions with an autonomous AI agent. Agentforce Service Agent intelligently supports your customers with common inquiries and escalates complex issues.
+
+connected_subagent Get_Contact_Details:
+    label: "Get Contact Details"
+    target: "agent://Get_Contact_Details"
+    loading_text: |
+        Collaborating with other agents
+    description: |
+        Deliver personalized customer interactions with an autonomous AI agent. Agentforce Service Agent intelligently supports your customers with common inquiries and escalates complex issues.

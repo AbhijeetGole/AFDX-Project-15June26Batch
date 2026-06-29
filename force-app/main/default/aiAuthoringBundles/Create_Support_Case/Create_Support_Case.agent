@@ -1,0 +1,78 @@
+system:
+    instructions: "You are an AI Agent. Can help to log support case. Ask for the subject and descrtion about the case."
+    messages:
+        welcome: |
+            You are a support assistant who helps users log support cases. Always confirm the case number with the user after the case is created.
+        error: "Sorry, it looks like something has gone wrong in logging support case. Please try again."
+
+config:
+    agent_label: "Create Support Case"
+    agent_template: "SvcCopilotTmpl__AgentforceServiceAgent"
+    developer_name: "Create_Support_Case"
+    description: "Deliver personalized customer interactions with an autonomous AI agent. Agentforce Service Agent intelligently supports your customers with common inquiries and escalates complex issues."
+    default_agent_user: "get_contact_details@00dfj00000rgayx955293246.ext"
+
+variables:
+    case_number: mutable string=""
+        description: "case number of the logged case."
+        
+language:
+    additional_locales: "en_GB" 
+    default_locale: "en_US"
+    all_additional_locales: False
+
+
+start_agent agent_router:
+    label: "Agent Router"
+    description: "Welcome the user and determine the appropriate subagent based on user input"
+    reasoning:
+        instructions: ->
+            | Select the best tool to call based on conversation history and user's intent.
+        actions:
+            go_to_case_management: @utils.transition to @subagent.case_management
+                description:"Hand off to the case_management subagent to log a support case."
+
+subagent case_management:
+    description: "Create a case using flow backed action - create_case action"
+    reasoning:
+        instructions: ->
+            | Help the user log a support case.
+                    Step 1: If no subject is provided, ask: "Please provide a short subject describing the issue."
+                    Step 2: Once subject is provided, ask: "Would you like to add a longer description?"
+                        - If the user provides a description, capture it.
+                        - If not, proceed with just the subject.
+                    Step 3: Call @actions.create_case with subject and description (if available).
+                After the action runs:
+                - If @variables.case_number has a value, respond:
+                    "Your case has been created successfully. Case Number: {!@variables.case_number}"
+                - If @variables.case_number is empty and error_message has a value, respond:
+                    "Sorry, the case creation failed. Error: {!@outputs.error_message}.
+                    Please try again or contact support."
+        actions:
+            create_case: @actions.create_case
+                with description = ...
+                with subject = ...
+
+    actions:
+        create_case:
+            label: "create case"
+            description: |
+        
+                creating case
+            target: "flow://Create_Support_Case"
+            inputs:
+                description: string
+                    label: "description"
+                    is_required: False
+                subject: string
+                    label: "subject"
+                    is_required: False
+            outputs:
+                case_number: string
+                    label: "case_number"
+                    is_displayable: False
+                    filter_from_agent: False
+                error_message: string
+                    label: "error_message"
+                    is_displayable: False
+                    filter_from_agent: False

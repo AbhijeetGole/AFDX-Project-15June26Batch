@@ -1,0 +1,145 @@
+system:
+    instructions: "You are a helpful book reviewer AI assistant. Be friendly and personalized. Always refer to contact by name when you know it."
+    messages:
+        welcome: |
+            Hi, Welcome to Book Reviewer. I am your personal book reviewer AI assistant.
+        error: "Sorry, it looks like something has gone wrong."
+
+config:
+    agent_label: "Book Review Agent"
+    agent_template: "SvcCopilotTmpl__AgentforceServiceAgent"
+    developer_name: "Book_Review_Agent"
+    description: "You are a book reviewer assistant who will give review regarding a book provided by user and also fetch the contact detaisl using contact name provide by user."
+    default_agent_user: "get_contact_details@00dfj00000rgayx955293246.ext"
+
+language:
+    additional_locales: "en_GB, fr, de, hi"
+    default_locale: "en_US"
+
+variables:
+    customer_name: mutable string = ""
+        description: "customer name or contact name"
+    
+    contactmailingaddress: mutable string =""
+        description:"contact's mailing street"
+    
+    contactmailingzip: mutable string =""
+        description:"contact's mailing zip"
+    
+    contactdetails: mutable object
+        description:"contact's full details"
+
+start_agent agent_router:
+    label: "Agent Router"
+    description: "Welcome the user and determine the appropriate subagent based on user input"
+    model_config:
+        model: "model://sfdc_ai__DefaultEinsteinHyperClassifier"
+    reasoning:
+        instructions: ->
+            | Select the best tool to call based on conversation history and user's intent.
+        actions:
+            go_to_ContactDetails_Assistant: @utils.transition to @subagent.ContactDetails_Assistant
+                description: "Adking for Contact name if not provided to fetch the contact details."
+            
+subagent ContactDetails_Assistant:
+    label: "Get Cotnact Details"
+    description: "Get the Contact Details basd on the Contact Name provided by user."
+    reasoning:
+        instructions:->
+            | Get the contact name from context and greet customer with name {!@variables.customer_name}. 
+              Ask for Contact Name, if not provided
+              Once contact name provided run the @actions.get_contact_details and pass the contact name as parameter
+              After action call:
+                If @variables.contactmaillingaddress is not empty:
+                    Respond: "Here are the details we found:
+                     -------------------------------
+                    Name - {!@variables.customer_name},
+                    Address - {!@variables.contactmailingaddress},
+                    Zip - {!@variables.contactmailingzip}
+                     ------------------------------- "
+                Else:
+                    Respond: "Sorry, no details found for this contact."
+        actions:
+            get_contact_details: @actions.get_contact_details
+                with contact_name = ...
+                set @variables.contactmailingaddress = @outputs.contactmailingaddress
+                set @variables.contactmailingzip = @outputs.contactmailingzip
+                set @variables.contactdetails = @outputs.contactdetails
+            
+            go_to_bookreview_assistant: @utils.transition to @subagent.bookreview_assistant
+                description: "start the book review assistant"
+
+    actions:
+        get_contact_details:
+            label: "get contact details"
+            description: | Get Contact Details
+            target: "flow://Get_Contact_Details_Based_on_Contact_Name"
+            inputs:
+                contact_name: string
+                    label: "contact_name"
+                    is_required: False
+            outputs:
+                contactdetails: object
+                    label: "contactdetails"
+                    complex_data_type_name: "lightning__recordInfoType"
+                    is_displayable: False
+                    filter_from_agent: False
+                contactmailingaddress: string
+                    label: "contactmailingaddress"
+                    is_displayable: False
+                    filter_from_agent: False
+                contactmailingzip: string
+                    label: "contactmailingzip"
+                    is_displayable: False
+                    filter_from_agent: False
+
+
+subagent bookreview_assistant:
+    label: "Book Review Assistant"
+    description: | Help Customer to review the book and sussgest the book store based on the mailing street and zip.
+    reasoning:
+        instructions: ->
+            | Ask for Book_Name if not provided.
+              Once Book_name is available, call get_book_review with book_name, contactmailingaddress, and contactmailingzip.
+              Display the book review of the Book_Name along with suggested bookstores.
+        actions:
+            get_book_review: @actions.get_book_review
+                with "Input:book_name" = ...
+                with "Input:contactmailingaddress" = ...
+                with "Input:contactmailingzip" = ...
+                with outputLanguage = ...
+                with isPreviewOnly = ...
+    actions:
+        get_book_review:
+            label: "get book review"
+            description: |  getting book reviewed using prompt as an action
+            target: "generatePromptResponse://Book_Review"
+            inputs:
+                "Input:book_name": string
+                    label: "book_name"
+                    is_required: True
+                "Input:contactmailingaddress": string
+                    label: "contactmailingaddress"
+                    is_required: True
+                "Input:contactmailingzip": string
+                    label: "contactmailingzip"
+                    is_required: True
+                outputLanguage: string
+                    label: "Output language"
+                    description: "Optional. Specify the response language using the appropriate two-character language code or five-character locale code (for example, en_US, en_GB, es, es_MX)."
+                    is_required: False
+                isPreviewOnly: boolean
+                    label: "Preview Only"
+                    description: "Resolves the prompt template without generating an LLM response."
+                    is_required: False
+            outputs:
+                promptResponse: string
+                    label: "Prompt Response"
+                    description: "The prompt response generated by the action based on the specified prompt and input."
+                    is_displayable: False
+                    filter_from_agent: False
+                generationId: string
+                    label: "Prompt Generation ID"
+                    description: "The unique identifier for the prompt generation associated with this action invocation."
+                    is_displayable: False
+                    filter_from_agent: False

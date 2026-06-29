@@ -1,0 +1,73 @@
+system:
+    instructions: |
+        You are an Employee Agent. When the user provides an Account name, call the Apex class AccountFlowService to retrieve Account Details.
+    messages:
+        welcome: |
+            Hi, Please provide an Account Name you to want to look up.
+        error: "Something went wrong. Try again."
+
+config:
+    agent_label: "AccountLookupAgent"
+    agent_template: "EmployeeCopilot__AgentforceEmployeeAgent"
+    developer_name: "AccountLookupAgent"
+    agent_type: "AgentforceEmployeeAgent"
+    description: "Fetches Account Record with Name, Phone and Industry!"
+
+language:
+    default_locale: "en_US"
+    additional_locales: "en_GB"
+    all_additional_locales: False
+
+start_agent agent_router:
+    label: "Agent Router"
+    description: "Routes user to account lookup"
+    model_config:
+        model: "model://sfdc_ai__DefaultEinsteinHyperClassifier"
+    reasoning:
+        instructions: |
+            Collect the Account name from the user.
+            If unclear, ask clarifying questions.
+        actions:
+            go_to_account_lookup: @utils.transition to @subagent.account_lookup
+              description: "Fetches Account details using Apex class."
+                
+subagent account_lookup:
+    description: "Call apex class AccountFlowService to retrieve account details."
+    reasoning:
+        instructions: |
+                1. If account_name is empty, ask for the Account Name.
+                2. Once account_name is provided:
+                - Call {!@actions.find_account}
+                - Display Account Id, Name, Phone and Industry back to the User.
+                - Format the contacts summary by splitting on semicolons and show each contact on a new line..
+                - If no contacts are found, display 'No Contacts Found'.
+                - Format the opportuniteis summary by splitting on semicolons and show each opportunity on a new line..
+                - If no opportunities are found, display 'No Oppotunities Found'.
+                - Format the cases summary by splitting on semicolons and show each case on a new line..
+                - If no cases are found, display 'No Cases Found'.
+        actions:
+            find_account: @actions.find_account
+                with accountName = ...
+    actions:
+        find_account:
+            description: "find account by account name"
+            inputs:
+                accountName: string
+                    is_required: True
+            outputs:
+                accountId: object
+                    description: "Account Id"
+                    complex_data_type_name: "lightning__recordIdType"
+                accountName: string
+                    description: "Account Name"
+                phone: string
+                    description: "Account Phone"
+                industry: string
+                    description: "Account Industry"
+                contactsSummary: string
+                    description: "Contacts related to Account"
+                opportunitiesSummary: string
+                    description: "Opportunities related to Account"
+                casesSummary: string
+                    description: "Cases related to Account"
+            target: "apex://AccountFlowService"

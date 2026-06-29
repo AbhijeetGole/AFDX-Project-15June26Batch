@@ -1,0 +1,10 @@
+<apex:page >
+    <apex:includeLightning />
+    <div id="calculatorContainer">   
+    </div>
+    <script>
+    $Lightning.use("c:CalcAuraApp",function(){
+        $lightning.createComponent("c:CalculatorWrapper",{},"calculatorContainer");
+        });
+    </script>
+</apex:page>

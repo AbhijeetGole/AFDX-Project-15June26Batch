@@ -1,0 +1,101 @@
+system:
+    instructions: |
+       You are a concise sales assistant who helps users qualify leads. Always confirm the lead name and score back to the user after scoring.
+
+        The user's current context is:
+        Current App Name: {!@variables.currentAppName}
+        Current Object Name: {!@variables.currentObjectApiName}
+        Current Page Type: {!@variables.currentPageType}
+        Current Record ID: {!@variables.currentRecordId}
+    messages:
+        welcome: | Hi, Give me a Lead Reference Number (e.g. LEAD-0042) and I will score the lead for you.
+        error: "Something went wrong while scoring the lead. Please try again."
+
+config:
+    agent_label: "LeadQualifier"
+    agent_template: "EmployeeCopilot__AgentforceEmployeeAgent"
+    developer_name: "LeadQualifier"
+    agent_type: "AgentforceEmployeeAgent"
+    description: "Lead Qualifier Assistant."
+
+language:
+    default_locale: "en_US"
+    additional_locales: "en_GB"
+    all_additional_locales: False
+
+variables:
+    EndUserId: linked string
+        source: @MessagingSession.MessagingEndUserId
+        description: "This variable may also be referred to as MessagingEndUser Id"
+    RoutableId: linked string
+        source: @MessagingSession.Id
+        description: "This variable may also be referred to as MessagingSession Id"
+    ContactId: linked string
+        source: @MessagingEndUser.ContactId
+        description: "This variable may also be referred to as MessagingEndUser ContactId"
+    EndUserLanguage: linked string
+        source: @MessagingSession.EndUserLanguage
+        description: "This variable may also be referred to as MessagingSession EndUserLanguage"
+    ChannelType: linked string
+        source: @MessagingSession.ChannelType
+        description: "This variable may also be referred to as MessagingSession ChannelType"
+    currentAppName: mutable string
+        description: "Salesforce Application Name"
+        visibility: "External"
+    currentObjectApiName: mutable string
+        description: "The API name of the current Salesforce object"
+        visibility: "External"
+    currentPageType: mutable string
+        description: "Page type (record, list, home)"
+        visibility: "External"
+    currentRecordId: mutable string
+        description: "The Salesforce ID of the current record"
+        visibility: "External"
+    VerifiedCustomerId: mutable string
+        description: "This variable may also be referred to as VerifiedCustomerId"
+        visibility: "Internal"
+
+knowledge:
+    rag_feature_config_id: ""
+    citations_url: ""
+    citations_enabled: False
+
+start_agent agent_router:
+    label: "Agent Router"
+    description: "Welcome the user and determine the appropriate subagent based on user input"
+    model_config:
+        model: "model://sfdc_ai__DefaultEinsteinHyperClassifier"
+    reasoning:
+        instructions: ->
+            | Select the best tool to call based on conversation history and user's intent.
+        actions:
+            go_to_Lead_Qualifier: @utils.transition to @subagent.Lead_Qualifier
+
+subagent Lead_Qualifier:
+    description: "Looks up a Lead by its auto generated reference number and returns a calculated score along with Lead name."
+    reasoning:
+        instructions: ->
+            | Help the user qualify a lead.
+                Ask for the lead reference number (format: LEAD-xxxx) if they haven't provided one.
+                Once you have the reference number, call {!@actions.qualify_lead}.
+                After the action runs, check the outputs:
+                - If leadName has a value, the lead was scored successfully. Tell the user the lead name and score.
+                - If leadName is empty and errorMessage has a value, the lookup failed. Share the errorMesasge and ask the user
+        actions:
+            qualify_lead: @actions.qualify_lead
+                            with leadReferenceNumber=...
+    actions:
+        qualify_lead:
+            description:"Qualifies a lead by looking it up via its lead reference number and returning a score from 0 to 100."
+            inputs:
+                leadReferenceNumber: string
+                    description:"The Lead reference number is the format LEAD-XXXX - required"
+                    is_required: True
+            outputs:
+                leadName:string
+                    description:"The full name of the Lead - populated on success."
+                score:integer
+                    description:"Calculated lead score from o to 100 - populated on success."
+                errorMessage:string
+                    description:"Error Message - Populated only on failure (e.g. Reference not found)"
+            target: "apex://LeadQualifierService"
